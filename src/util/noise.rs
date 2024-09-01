@@ -47,7 +47,7 @@ impl PerlinNoise {
         res
     }
 
-    // a noise with range [-1.0, 1.0]
+    /// a noise with range [-1.0, 1.0]
     pub fn noise2d(&self, x: f32, y: f32) -> f32 {
         let xi = index_wrap(x.floor() as isize, 256);
         let yi = index_wrap(y.floor() as isize, 256);
