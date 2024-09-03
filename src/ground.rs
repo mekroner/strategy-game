@@ -51,7 +51,10 @@ pub struct Chunk {
 }
 
 const HEIGHT_MAP_SIZE: usize = 50;
-pub struct HeightMap([f32; HEIGHT_MAP_SIZE * HEIGHT_MAP_SIZE]);
+pub struct HeightMap{
+    height_data: [f32; HEIGHT_MAP_SIZE * HEIGHT_MAP_SIZE],
+    normal: [Vec3; HEIGHT_MAP_SIZE * HEIGHT_MAP_SIZE]
+}
 
 fn get_index(x: usize, y: usize) -> usize {
     assert!(x < HEIGHT_MAP_SIZE);
@@ -59,46 +62,77 @@ fn get_index(x: usize, y: usize) -> usize {
     y + x * HEIGHT_MAP_SIZE
 }
 
+fn calculate_normal(id: ChunkId, perlin: &PerlinNoise) -> [Vec3; HEIGHT_MAP_SIZE.pow(2)]{
+    let mut normals = [Vec3::ZERO; HEIGHT_MAP_SIZE.pow(2)];
+    let x_offset = (HEIGHT_MAP_SIZE as isize - 1) * id.0;
+    let y_offset = (HEIGHT_MAP_SIZE as isize - 1) * id.1;
+    for y in 0..HEIGHT_MAP_SIZE {
+        for x in 0..HEIGHT_MAP_SIZE {
+            let d = 0.1;
+            let xf = (x as isize + x_offset) as f32;
+            let yf = (y as isize + y_offset) as f32;
+
+            let t = perlin.fractal_brownian_motion(xf, yf+d);
+            let b = perlin.fractal_brownian_motion(xf, yf-d);
+            let l = perlin.fractal_brownian_motion(xf+d, yf);
+            let r = perlin.fractal_brownian_motion(xf-d, yf);
+
+            let step = 2.0* d * CHUNK_SIZE / HEIGHT_MAP_SIZE as f32;
+            let x_dir = Vec3::new(step, l - r, 0.0);
+            let z_dir = Vec3::new(0.0, t - b, step);
+            let normal = z_dir.cross(x_dir).normalize();
+
+            let index = get_index(x, y);
+            normals[index] = normal;
+        }
+    }
+    normals
+}
+
 impl HeightMap {
     fn new(id: ChunkId) -> Self {
         let perlin = PerlinNoise::new();
-        let mut map = [0.0; HEIGHT_MAP_SIZE * HEIGHT_MAP_SIZE];
+        let mut height_data = [0.0; HEIGHT_MAP_SIZE * HEIGHT_MAP_SIZE];
         for y in 0..HEIGHT_MAP_SIZE {
             for x in 0..HEIGHT_MAP_SIZE {
                 let index = get_index(x, y);
                 let xf = (x as isize + ((HEIGHT_MAP_SIZE as isize - 1) * id.0)) as f32;
                 let yf = (y as isize + ((HEIGHT_MAP_SIZE as isize - 1) * id.1)) as f32;
                 let height = perlin.fractal_brownian_motion(xf, yf);
-                map[index] = height;
+                height_data[index] = height;
             }
         }
-        Self(map)
+        let normal = calculate_normal(id, &perlin);
+        Self{height_data, normal}
     }
 
     fn get(&self, x: usize, y: usize) -> f32 {
         let index = get_index(x, y);
-        self.0[index]
+        self.height_data[index]
     }
+    
 
     fn get_normal(&self, x: usize, y: usize) -> Vec3 {
-        if x <= 0 || y <= 0 {
-            return Vec3::X;
-        }
-        if x >= HEIGHT_MAP_SIZE - 1 || y >= HEIGHT_MAP_SIZE - 1 {
-            return Vec3::X;
-        }
-        let index_t = get_index(x, y + 1);
-        let index_b = get_index(x, y - 1);
-        let index_l = get_index(x + 1, y);
-        let index_r = get_index(x - 1, y);
-        let t = self.0[index_t] * 2.0;
-        let b = self.0[index_b] * 2.0;
-        let l = self.0[index_l] * 2.0;
-        let r = self.0[index_r] * 2.0;
-        let step = 2.0 * CHUNK_SIZE / HEIGHT_MAP_SIZE as f32;
-        let x_dir = Vec3::new(step, l - r, 0.0);
-        let z_dir = Vec3::new(0.0, t - b, step);
-        z_dir.cross(x_dir).normalize()
+        let index = get_index(x, y);
+        self.normal[index]
+        // if x <= 0 || y <= 0 {
+        //     return Vec3::X;
+        // }
+        // if x >= HEIGHT_MAP_SIZE - 1 || y >= HEIGHT_MAP_SIZE - 1 {
+        //     return Vec3::X;
+        // }
+        // let index_t = get_index(x, y + 1);
+        // let index_b = get_index(x, y - 1);
+        // let index_l = get_index(x + 1, y);
+        // let index_r = get_index(x - 1, y);
+        // let t = self.height_data[index_t] * 2.0;
+        // let b = self.height_data[index_b] * 2.0;
+        // let l = self.height_data[index_l] * 2.0;
+        // let r = self.height_data[index_r] * 2.0;
+        // let step = 2.0 * CHUNK_SIZE / HEIGHT_MAP_SIZE as f32;
+        // let x_dir = Vec3::new(step, l - r, 0.0);
+        // let z_dir = Vec3::new(0.0, t - b, step);
+        // z_dir.cross(x_dir).normalize()
     }
 }
 
@@ -285,7 +319,7 @@ type Pixel = [u8; 4];
 type PixelData = Vec<[u8; 4]>;
 
 pub fn pixel_data_from_height_map(map: &HeightMap) -> PixelData {
-    map.0
+    map.height_data
         .iter()
         .map(|y| {
             let v = (((y + 1.0) / 2.0) * 255.0) as u8;
