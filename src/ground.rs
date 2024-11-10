@@ -50,10 +50,10 @@ pub struct Chunk {
     height_map: HeightMap,
 }
 
-const HEIGHT_MAP_SIZE: usize = 50;
-pub struct HeightMap{
+const HEIGHT_MAP_SIZE: usize = 100;
+pub struct HeightMap {
     height_data: [f32; HEIGHT_MAP_SIZE * HEIGHT_MAP_SIZE],
-    normal: [Vec3; HEIGHT_MAP_SIZE * HEIGHT_MAP_SIZE]
+    normal: [Vec3; HEIGHT_MAP_SIZE * HEIGHT_MAP_SIZE],
 }
 
 fn get_index(x: usize, y: usize) -> usize {
@@ -62,22 +62,22 @@ fn get_index(x: usize, y: usize) -> usize {
     y + x * HEIGHT_MAP_SIZE
 }
 
-fn calculate_normal(id: ChunkId, perlin: &PerlinNoise) -> [Vec3; HEIGHT_MAP_SIZE.pow(2)]{
+fn calculate_normal(id: ChunkId, perlin: &PerlinNoise) -> [Vec3; HEIGHT_MAP_SIZE.pow(2)] {
     let mut normals = [Vec3::ZERO; HEIGHT_MAP_SIZE.pow(2)];
     let x_offset = (HEIGHT_MAP_SIZE as isize - 1) * id.0;
     let y_offset = (HEIGHT_MAP_SIZE as isize - 1) * id.1;
+    let d = 0.1;
     for y in 0..HEIGHT_MAP_SIZE {
         for x in 0..HEIGHT_MAP_SIZE {
-            let d = 0.1;
             let xf = (x as isize + x_offset) as f32;
             let yf = (y as isize + y_offset) as f32;
 
-            let t = perlin.fractal_brownian_motion(xf, yf+d);
-            let b = perlin.fractal_brownian_motion(xf, yf-d);
-            let l = perlin.fractal_brownian_motion(xf+d, yf);
-            let r = perlin.fractal_brownian_motion(xf-d, yf);
+            let t = perlin.fractal_brownian_motion(xf, yf + d);
+            let b = perlin.fractal_brownian_motion(xf, yf - d);
+            let l = perlin.fractal_brownian_motion(xf + d, yf);
+            let r = perlin.fractal_brownian_motion(xf - d, yf);
 
-            let step = 2.0* d * CHUNK_SIZE / HEIGHT_MAP_SIZE as f32;
+            let step = 2.0 * d * CHUNK_SIZE / HEIGHT_MAP_SIZE as f32;
             let x_dir = Vec3::new(step, l - r, 0.0);
             let z_dir = Vec3::new(0.0, t - b, step);
             let normal = z_dir.cross(x_dir).normalize();
@@ -103,14 +103,16 @@ impl HeightMap {
             }
         }
         let normal = calculate_normal(id, &perlin);
-        Self{height_data, normal}
+        Self {
+            height_data,
+            normal,
+        }
     }
 
     fn get(&self, x: usize, y: usize) -> f32 {
         let index = get_index(x, y);
         self.height_data[index]
     }
-    
 
     fn get_normal(&self, x: usize, y: usize) -> Vec3 {
         let index = get_index(x, y);
