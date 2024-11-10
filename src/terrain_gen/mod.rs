@@ -1,3 +1,5 @@
+pub mod pixels;
+
 use std::{isize, usize};
 
 use bevy::{
@@ -8,11 +10,11 @@ use bevy::{
     render::{
         mesh::{Indices, PrimitiveTopology},
         render_asset::RenderAssetUsages,
-        render_resource::{Extent3d, TextureDimension, TextureFormat},
     },
     utils::hashbrown::HashMap,
 };
 use bevy_egui::{egui, EguiContexts, EguiUserTextures};
+use pixels::PixelData;
 
 use crate::util::noise::PerlinNoise;
 
@@ -39,15 +41,15 @@ pub fn debug_show_terrain_normals(mut gizmos: Gizmos, map: Res<TerrainMap>) {
 
 #[derive(Resource)]
 pub struct TerrainMap {
-    chunks: HashMap<ChunkId, Chunk>,
+    pub chunks: HashMap<ChunkId, Chunk>,
 }
 
-#[derive(Event)]
+#[derive(Event, Deref, Debug)]
 pub struct SpawnTerrainMeshEvent(ChunkId);
 
 const CHUNK_SIZE: f32 = 5.0;
 pub struct Chunk {
-    height_map: HeightMap,
+    pub height_map: HeightMap,
 }
 
 const HEIGHT_MAP_SIZE: usize = 50;
@@ -138,8 +140,8 @@ impl HeightMap {
 
 pub fn spawn_terrain_map(mut event: EventWriter<SpawnTerrainMeshEvent>, mut cmd: Commands) {
     let mut chunks = HashMap::new();
-    for x in -1..=1 {
-        for z in -1..=1 {
+    for x in -2..=2 {
+        for z in -2..=2 {
             let id = (x, z);
             chunks.insert(
                 id,
@@ -148,6 +150,7 @@ pub fn spawn_terrain_map(mut event: EventWriter<SpawnTerrainMeshEvent>, mut cmd:
                 },
             );
             event.send(SpawnTerrainMeshEvent(id));
+            log::info!("Created chunk: {:?}", id);
         }
     }
 
@@ -315,43 +318,6 @@ fn noise_vec(width: u32, height: u32) -> Vec<u8> {
 #[derive(Deref, Resource)]
 pub struct HeighMapImage(Handle<Image>);
 
-type Pixel = [u8; 4];
-type PixelData = Vec<[u8; 4]>;
-
-pub fn pixel_data_from_height_map(map: &HeightMap) -> PixelData {
-    map.height_data
-        .iter()
-        .map(|y| {
-            let v = (((y + 1.0) / 2.0) * 255.0) as u8;
-            [v, v, v, 255]
-        })
-        .collect()
-}
-
-pub fn pixel_data_empty(width: u32, height: u32) -> PixelData {
-    (0..(width * height))
-        .map(|i| {
-            let v = (255.0 * (i as f32 / (width as f32 * height as f32))) as u8;
-            [v, v, v, 255]
-        })
-        .collect()
-}
-
-pub fn create_image(width: u32, height: u32, pixels: PixelData) -> Image {
-    let pixel_data = pixels.into_iter().flatten().collect();
-    Image::new(
-        Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        },
-        TextureDimension::D2,
-        pixel_data,
-        TextureFormat::Rgba8UnormSrgb,
-        RenderAssetUsages::all(),
-    )
-}
-
 pub fn update_height_map_image(
     terrain_map: Res<TerrainMap>,
     image_handle: Res<HeighMapImage>,
@@ -363,8 +329,8 @@ pub fn update_height_map_image(
             break;
         };
         let map = &chunk.height_map;
-        let pixels = pixel_data_from_height_map(map);
-        let data = pixels.into_iter().flatten().collect();
+        let pixels = PixelData::from_height_map(map);
+        let data = pixels.flat_data();
 
         let Some(image) = images.get_mut(&image_handle.0) else {
             break;
@@ -378,8 +344,8 @@ pub fn setup_image(
     mut images: ResMut<Assets<Image>>,
     mut egui_user_textures: ResMut<EguiUserTextures>,
 ) {
-    let data = pixel_data_empty(HEIGHT_MAP_SIZE as u32, HEIGHT_MAP_SIZE as u32);
-    let image = create_image(HEIGHT_MAP_SIZE as u32, HEIGHT_MAP_SIZE as u32, data);
+    let data = PixelData::empty(HEIGHT_MAP_SIZE as u32, HEIGHT_MAP_SIZE as u32);
+    let image = data.to_image();
     let handle = images.add(image);
     egui_user_textures.add_image(handle.clone());
     cmd.insert_resource(HeighMapImage(handle));

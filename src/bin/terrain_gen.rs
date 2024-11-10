@@ -9,12 +9,10 @@ use bevy::{
         RenderPlugin,
     },
 };
-use bevy_egui::{egui, EguiContexts, EguiPlugin, EguiUserTextures};
-use ground::{debug_ui_system, setup_image, SpawnTerrainMeshEvent};
-
-mod camera;
-mod ground;
-mod util;
+use bevy_egui::EguiPlugin;
+use strategy_game::camera::OrbitCameraPlugin;
+use strategy_game::terrain_gen;
+use strategy_game::terrain_gen::{debug_ui_system, setup_image, SpawnTerrainMeshEvent};
 
 fn main() {
     App::new()
@@ -35,21 +33,22 @@ fn main() {
             global: false,
             default_color: WHITE.into(),
         })
-        .add_plugins(camera::OrbitCameraPlugin)
+        .add_plugins(OrbitCameraPlugin)
         .add_systems(
             Startup,
-            (spawn_light, setup_image, ground::spawn_terrain_map),
+            (spawn_light, setup_image, terrain_gen::spawn_terrain_map),
         )
         .add_systems(
             Update,
             (
-                ground::spawn_terrain_plain, 
-                ground::update_height_map_image
+                terrain_gen::spawn_terrain_plain,
+                terrain_gen::update_height_map_image,
             ),
         )
-        .add_systems(Update, (debug_ui_system, 
-            // ground::debug_show_terrain_normals
-        ))
+        .add_systems(
+            Update,
+            (debug_ui_system, terrain_gen::debug_show_terrain_normals),
+        )
         .run();
 }
 
