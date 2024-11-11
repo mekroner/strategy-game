@@ -45,14 +45,14 @@ pub struct TerrainMap {
 }
 
 #[derive(Event, Deref, Debug)]
-pub struct SpawnTerrainMeshEvent(ChunkId);
+pub struct SpawnTerrainMeshEvent(pub ChunkId);
 
 const CHUNK_SIZE: f32 = 5.0;
 pub struct Chunk {
     pub height_map: HeightMap,
 }
 
-const HEIGHT_MAP_SIZE: usize = 100;
+const HEIGHT_MAP_SIZE: usize = 62;
 pub struct HeightMap {
     height_data: [f32; HEIGHT_MAP_SIZE * HEIGHT_MAP_SIZE],
     normal: [Vec3; HEIGHT_MAP_SIZE * HEIGHT_MAP_SIZE],
@@ -92,7 +92,7 @@ fn calculate_normal(id: ChunkId, perlin: &PerlinNoise) -> [Vec3; HEIGHT_MAP_SIZE
 }
 
 impl HeightMap {
-    fn new(id: ChunkId) -> Self {
+    pub fn new(id: ChunkId) -> Self {
         let perlin = PerlinNoise::new();
         let mut height_data = [0.0; HEIGHT_MAP_SIZE * HEIGHT_MAP_SIZE];
         for y in 0..HEIGHT_MAP_SIZE {
@@ -142,19 +142,19 @@ impl HeightMap {
 
 pub fn spawn_terrain_map(mut event: EventWriter<SpawnTerrainMeshEvent>, mut cmd: Commands) {
     let mut chunks = HashMap::new();
-    for x in -2..=2 {
-        for z in -2..=2 {
-            let id = (x, z);
-            chunks.insert(
-                id,
-                Chunk {
-                    height_map: HeightMap::new(id),
-                },
-            );
-            event.send(SpawnTerrainMeshEvent(id));
-            log::info!("Created chunk: {:?}", id);
-        }
-    }
+    // for x in -2..=2 {
+    //     for z in -2..=2 {
+    //         let id = (x, z);
+    //         chunks.insert(
+    //             id,
+    //             Chunk {
+    //                 height_map: HeightMap::new(id),
+    //             },
+    //         );
+    //         event.send(SpawnTerrainMeshEvent(id));
+    //         log::info!("Created chunk: {:?}", id);
+    //     }
+    // }
 
     let map = TerrainMap { chunks };
     cmd.insert_resource(map);

@@ -87,7 +87,7 @@ fn dot(v0: (f32, f32), v1: (f32, f32)) -> f32 {
     v0.0 * v1.0 + v0.1 * v1.1
 }
 
-fn smoothstep(t: f32) -> f32 {
+pub fn smoothstep(t: f32) -> f32 {
     ((6.0 * t - 15.0) * t + 10.0) * t * t * t
 }
 

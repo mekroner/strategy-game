@@ -1,3 +1,4 @@
+use std::f32::consts::PI;
 use std::isize;
 use std::ops::Deref;
 
@@ -15,32 +16,20 @@ fn main() {
         .add_plugins(LogDiagnosticsPlugin::default())
         .add_event::<SpawnTerrainMeshEvent>()
         .add_systems(Startup, spawn_camera)
-        .add_systems(Startup, spawn_blank_texture)
-        .add_systems(Update, gizmo_grid)
+        // .add_systems(Update, gizmo_grid)
         // terrain systems
         .add_systems(Startup, spawn_terrain_map)
         .add_systems(Update, spawn_chunk_image)
         .add_systems(Startup, spawn_chunk_loader)
-        .add_systems(Update, (gizmo_chunk_loader, move_chunk_loader))
+        .add_systems(
+            Update,
+            (gizmo_chunk_loader, move_chunk_loader, spawn_terrain),
+        )
         .run();
 }
 
 fn spawn_camera(mut cmd: Commands) {
     cmd.spawn(Camera2dBundle::default());
-}
-
-fn spawn_blank_texture(mut commands: Commands, mut textures: ResMut<Assets<Image>>) {
-    let width = 50;
-    let height = 50;
-    let pixel_data = PixelData::splat(width, height, [255, 0, 0, 255]);
-    let image = pixel_data.to_image();
-    let texture_handle = textures.add(image);
-
-    // You can now use this texture handle with materials or sprite rendering
-    commands.spawn(SpriteBundle {
-        texture: texture_handle,
-        ..Default::default()
-    });
 }
 
 pub fn spawn_chunk_image(
@@ -49,26 +38,58 @@ pub fn spawn_chunk_image(
     terrain_map: Res<TerrainMap>,
     mut textures: ResMut<Assets<Image>>,
 ) {
-    let size = 50;
+    let size = 64;
     for ev in event.read() {
-        let x_offset = ev.0 * size as isize;
-        let z_offset = ev.1 * size as isize;
-        let pos = Vec3::new(z_offset as f32, -x_offset as f32, 0.0);
+        let x_offset = ev.0 .0 * size as isize;
+        let z_offset = ev.0 .1 * size as isize;
+        let pos = Vec3::new(x_offset as f32, z_offset as f32, 0.0);
+        // let pos = Vec3::new(z_offset as f32, -x_offset as f32, 0.0);
 
         let Some(chunk) = terrain_map.chunks.get(ev.deref()) else {
             return;
         };
-        let pixel_data = PixelData::from_height_map(&chunk.height_map);
+        let mut pixel_data = PixelData::from_height_map(&chunk.height_map);
+        pixel_data.apply_gradient();
         let image = pixel_data.to_image();
         let texture_handle = textures.add(image.clone());
 
         // You can now use this texture handle with materials or sprite rendering
         cmd.spawn(SpriteBundle {
             texture: texture_handle,
-            transform: Transform::default().with_translation(pos),
+            transform: Transform::default()
+                .with_translation(pos)
+                .with_rotation(Quat::from_rotation_z(PI / 2.0)),
             ..Default::default()
         });
         log::info!("Spawned image {:?}.", ev);
+    }
+}
+
+fn spawn_terrain(
+    mut event: EventWriter<SpawnTerrainMeshEvent>,
+    mut map: ResMut<TerrainMap>,
+    q_loader: Query<&mut ChunkLoader>,
+) {
+    let loader = q_loader.single();
+    for x in -loader.range..=loader.range {
+        for z in -loader.range..=loader.range {
+            let xi = loader.x.floor() as isize;
+            let zi = loader.y.floor() as isize;
+            let id = (x as isize + xi, z as isize + zi);
+
+            if map.chunks.contains_key(&id) {
+                continue;
+            }
+
+            map.chunks.insert(
+                id,
+                Chunk {
+                    height_map: HeightMap::new(id),
+                },
+            );
+            event.send(SpawnTerrainMeshEvent(id));
+            log::info!("Created chunk: {:?}", id);
+        }
     }
 }
 
@@ -81,11 +102,6 @@ fn gizmo_grid(mut gizmos: Gizmos, q_loader: Query<&mut ChunkLoader>) {
             let active_color = GREEN;
             let unactive_color = DARK_GREY;
             let mut color = unactive_color;
-            // if (loader.x - x as f32).abs() < loader.range as f32
-            //     && (loader.y - y as f32).abs() < loader.range as f32
-            // {
-            //     color = active_color
-            // }
             if (loader.x - x as f32).powi(2) + (loader.y - y as f32).powi(2)
                 < (loader.range as f32).powi(2)
             {
@@ -108,11 +124,11 @@ fn spawn_chunk_loader(mut cmd: Commands) {
 struct ChunkLoader {
     x: f32,
     y: f32,
-    range: u32,
+    range: i32,
 }
 
 fn gizmo_chunk_loader(mut gizmos: Gizmos, q_loader: Query<&mut ChunkLoader>) {
-    let size = 50.0;
+    let size = 64.0;
     let loader = q_loader.single();
     let position = Vec2::new(size * loader.x, size * loader.y);
     gizmos.circle_2d(position, 10.0, RED);

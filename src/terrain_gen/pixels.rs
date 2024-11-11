@@ -1,7 +1,10 @@
-use bevy::render::{
-    render_asset::RenderAssetUsages,
-    render_resource::{Extent3d, TextureDimension, TextureFormat},
-    texture::Image,
+use bevy::{
+    log,
+    render::{
+        render_asset::RenderAssetUsages,
+        render_resource::{Extent3d, TextureDimension, TextureFormat},
+        texture::Image,
+    },
 };
 
 use super::{HeightMap, HEIGHT_MAP_SIZE};
@@ -58,6 +61,46 @@ impl PixelData {
         self.pixels.clone().into_iter().flatten().collect()
     }
 
+    pub fn quantize(&mut self, steps: f32) {
+        let step_size = 255.0 / (steps - 1.0);
+        for pixel in self.pixels.iter_mut() {
+            pixel[0] = ((pixel[0] as f32 / step_size).round() * step_size) as u8;
+            pixel[1] = ((pixel[1] as f32 / step_size).round() * step_size) as u8;
+            pixel[2] = ((pixel[2] as f32 / step_size).round() * step_size) as u8;
+        }
+    }
+
+    pub fn apply_gradient(&mut self) {
+        let gradient = vec![
+            (0.3, [0, 0, 255, 255]),
+            (0.5, [0, 255, 0, 255]),
+            (0.6, [100, 125, 125, 255]),
+            (0.9, [255, 255, 255, 255]),
+        ];
+        'out: for pixel in self.pixels.iter_mut() {
+            let t = pixel[0] as f32 / 255.0;
+            if t < gradient.first().unwrap().0 {
+                *pixel = gradient.first().unwrap().1;
+                continue;
+            }
+
+            if t > gradient.last().unwrap().0 {
+                *pixel = gradient.last().unwrap().1;
+                continue;
+            }
+
+            for i in 1..gradient.len() {
+                if t < gradient[i].0 {
+                    let ratio = (t - gradient[i - 1].0) / (gradient[i].0 - gradient[i - 1].0);
+                    *pixel = lerp_pixel(gradient[i - 1].1, gradient[i].1, ratio);
+                    continue 'out;
+                }
+            }
+
+            *pixel = [255, 0, 0, 255];
+        }
+    }
+
     pub fn to_image(&self) -> Image {
         let pixel_data = self.flat_data();
         Image::new(
@@ -72,4 +115,12 @@ impl PixelData {
             RenderAssetUsages::all(),
         )
     }
+}
+
+fn lerp_pixel(start: Pixel, end: Pixel, t: f32) -> Pixel {
+    let r = (start[0] as f32 + t * (end[0] as f32 - start[0] as f32)) as u8;
+    let g = (start[1] as f32 + t * (end[1] as f32 - start[1] as f32)) as u8;
+    let b = (start[2] as f32 + t * (end[2] as f32 - start[2] as f32)) as u8;
+    let a = (start[3] as f32 + t * (end[3] as f32 - start[3] as f32)) as u8;
+    [r, g, b, a]
 }
